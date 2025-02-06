@@ -13,3 +13,20 @@ From point 2 of the workflow, the first option selection will help dictate which
 Item description will be filled in the first empty row of the designated column, while Amount will be filled in the right column/cell.
 Last option selection will then be automatically filled in the next column/cell as well.
 
+---
+
+Before that, you need to allow your script to access Google Sheets and Google Drive on behalf of your service account: 
+1. Go to the Google Cloud Console: Google Cloud Console
+2. Create a new project.
+3. Enable Google Sheets API and Google Drive API.
+4. Go to APIs & Services > Credentials.
+5. Click Create Credentials > Service Account.
+6. Download the JSON key file and store it in your project folder.
+7. Share your Google Sheet with your service account email which is found in the JSON file.
+
+On Terminal,
+pip install python-telegram-bot gspread oauth2client
+
+Have the following ready:
+1. Telegram Token (via BotFather)
+2. Google Sheet ID (Between /d/ and /edit of your Google Sheet)
