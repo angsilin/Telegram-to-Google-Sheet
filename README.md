@@ -13,6 +13,8 @@ From point 2 of the workflow, the first option selection will help dictate which
 Item description will be filled in the first empty row of the designated column, while Amount will be filled in the right column/cell.
 Last option selection will then be automatically filled in the next column/cell as well.
 
+P.S I have made my Option 1 skip 2 columns before filling in Payment Method.
+
 ---
 
 Before that, you need to allow your script to access Google Sheets and Google Drive on behalf of your service account: 
