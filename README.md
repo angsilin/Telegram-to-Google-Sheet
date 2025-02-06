@@ -1,6 +1,6 @@
 As the name states, this code allows users to send messages via their Telegram Bot and it will automatically be filled into their designated Google Sheet.
 
-In this scenario, I have created this bot to automatically update my travel spending so that I am able to track 1) Total cost of spending 2) Spending based on Payment Method 3) Category spent on.
+In this scenario, I have created a Telegram bot to automatically update my travel spending on my Google Sheet so that I am able to track 1) Total cost of spending 2) Spending based on Payment Method 3) Category spent on while on the move.
 
 **Workflow with example:**
 1. User sends '/start'
