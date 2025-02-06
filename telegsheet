@@ -1,0 +1,228 @@
+# Connect Google Sheets to Python
+
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+import string
+
+# Link Telegram Bot to Google Sheet
+
+from telegram import (
+    Update,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+)
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    CallbackContext,
+    ConversationHandler,
+)
+
+# Define the scope
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive",
+]
+
+# Load credentials, replace ABCDEFG with path of JSON
+creds = ServiceAccountCredentials.from_json_keyfile_name(
+    r"ABCDEFG.json",
+    scope,
+)
+
+# Authorize and open the sheet. Replace with Google Sheet ID
+client = gspread.authorize(creds)
+sheet = client.open_by_key(
+    "GOOGLESHEET_ID"
+).sheet1  # Open first sheet
+
+
+# Insert Telegram Token
+TOKEN = "REPLACE_TELE_TOKEN"
+
+# Define conversation states
+SELECT_OPTION, ENTER_FIRST_TEXT, ENTER_SECOND_TEXT, SELECT_SECOND_OPTION = range(4)
+
+# Define options for the menu
+menu_options = [
+    ["Option 1", "Option 2"],
+    ["Option 3", "Option 4"],
+    ["Option 5"],
+]
+
+second_menu_options = [
+    ["Cash", "Debit Card"],
+    ["Debit Card 2", "Credit Card 1"],
+    ["Credit Card 2"],
+]
+
+
+column_mapping = {
+    "Option 1": "H",  # Column H
+    "Option 2": "N",  # Column N
+    "Option 3": "R",  # Column R
+    "Option 4": "V",  # Column V
+    "Option 5": "Z",  # Column Z
+}
+
+
+async def start(update: Update, context: CallbackContext):
+    keyboard = ReplyKeyboardMarkup(
+        menu_options, one_time_keyboard=True, resize_keyboard=True
+    )
+    await update.message.reply_text("Please select an option:", reply_markup=keyboard)
+    return SELECT_OPTION
+
+
+async def handle_selection(update: Update, context: CallbackContext):
+    user_choice = update.message.text
+
+    if user_choice in column_mapping:
+        context.user_data["selected_column"] = column_mapping[user_choice]
+        context.user_data["selected_option"] = user_choice  # Store the option here
+
+        await update.message.reply_text(
+            f"You selected: {user_choice}\nNow, please type your Item:",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return ENTER_FIRST_TEXT
+    else:
+        await update.message.reply_text("Invalid choice. Please select from the menu.")
+        return SELECT_OPTION
+
+
+def next_column(col):
+    """Increment Excel column labels (A -> B -> ... -> Z -> AA -> AB ...)"""
+    if col == "Z":
+        return "AA"
+    elif len(col) == 1:
+        return string.ascii_uppercase[string.ascii_uppercase.index(col) + 1]
+    else:
+        last_char = col[-1]
+        prefix = col[:-1]
+        if last_char == "Z":
+            return next_column(prefix) + "A"
+        else:
+            return (
+                prefix
+                + string.ascii_uppercase[string.ascii_uppercase.index(last_char) + 1]
+            )
+
+
+async def handle_first_text(update: Update, context: CallbackContext):
+    user_text = update.message.text
+    selected_column = context.user_data.get("selected_column")
+
+    if selected_column:
+        col_values = sheet.col_values(ord(selected_column) - 64)
+        next_row = len(col_values) + 1
+
+        # Save first input
+        sheet.update_acell(f"{selected_column}{next_row}", user_text)
+
+        # Fix column incrementing
+        next_col = next_column(selected_column)
+
+        context.user_data["selected_row"] = next_row
+        context.user_data["next_column"] = next_col
+
+        await update.message.reply_text("Great! Now, please type amount in JPY:")
+        return ENTER_SECOND_TEXT
+    else:
+        await update.message.reply_text(
+            "Something went wrong. Please start again with /start."
+        )
+        return SELECT_OPTION
+
+
+async def handle_second_text(update: Update, context: CallbackContext):
+    user_text = update.message.text
+    next_col = context.user_data.get("next_column")
+    selected_row = context.user_data.get("selected_row")
+
+    if next_col and selected_row:
+        sheet.update_acell(f"{next_col}{selected_row}", user_text)
+
+        # Fix column incrementing for final column
+        final_col = next_column(next_col)
+        context.user_data["final_column"] = final_col
+
+        keyboard = ReplyKeyboardMarkup(
+            second_menu_options, one_time_keyboard=True, resize_keyboard=True
+        )
+        await update.message.reply_text(
+            "Now, select another option from this menu:", reply_markup=keyboard
+        )
+        return SELECT_SECOND_OPTION
+    else:
+        await update.message.reply_text(
+            "Something went wrong. Please start again with /start."
+        )
+        return SELECT_OPTION
+
+
+async def handle_second_selection(update: Update, context: CallbackContext):
+    user_choice = update.message.text
+    selected_row = context.user_data.get("selected_row")
+    final_column = context.user_data.get("final_column")
+    selected_option = context.user_data.get(
+        "selected_option"
+    )  # Track the first menu selection
+
+    if selected_option == "Transport":
+        # Skip 2 columns instead of 1
+        final_column = next_column(next_column(final_column))
+
+    if selected_row and final_column:
+        # Save the second menu choice in the column next to the second input
+        sheet.update_acell(f"{final_column}{selected_row}", user_choice)
+
+        await update.message.reply_text(
+            f"You selected: {user_choice}\nYour data has been successfully saved!",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text(
+            "Something went wrong. Please start again with /start."
+        )
+        return SELECT_OPTION
+
+
+async def cancel(update: Update, context: CallbackContext):
+    await update.message.reply_text(
+        "Operation canceled.", reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
+
+
+# Conversation handler
+conv_handler = ConversationHandler(
+    entry_points=[CommandHandler("start", start)],
+    states={
+        SELECT_OPTION: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_selection)
+        ],
+        ENTER_FIRST_TEXT: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_first_text)
+        ],
+        ENTER_SECOND_TEXT: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_second_text)
+        ],
+        SELECT_SECOND_OPTION: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_second_selection)
+        ],
+    },
+    fallbacks=[CommandHandler("cancel", cancel)],
+)
+
+# Create bot application
+application = Application.builder().token(TOKEN).build()
+
+# Add conversation handler
+application.add_handler(conv_handler)
+
+# Run bot
+application.run_polling()
